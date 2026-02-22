@@ -1,0 +1,83 @@
+import requests
+import time
+
+TELEGRAM_TOKEN = "SEU_TOKEN_AQUI"
+CHAT_ID = "7040320123"
+API_KEY = "6a677b9f3f89cb6649ba2f02a4d2772c"
+
+BASE_URL = "https://v3.football.api-sports.io"
+
+headers = {
+    "x-apisports-key": API_KEY
+}
+
+def enviar_telegram(mensagem):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": mensagem
+    }
+    requests.post(url, data=payload)
+
+def verificar_jogos():
+    url = f"{BASE_URL}/fixtures?live=all"
+    response = requests.get(url, headers=headers)
+    data = response.json()
+
+    if "response" not in data:
+        return
+
+    for jogo in data["response"]:
+        minuto = jogo["fixture"]["status"]["elapsed"]
+
+        if not minuto:
+            continue
+
+        if (28 <= minuto <= 35) or (68 <= minuto <= 78):
+
+            fixture_id = jogo["fixture"]["id"]
+
+            stats_url = f"{BASE_URL}/fixtures/statistics?fixture={fixture_id}"
+            stats_resp = requests.get(stats_url, headers=headers)
+            stats_data = stats_resp.json()
+
+            try:
+                stats = stats_data["response"]
+
+                total_corners = 0
+                ataques_perigosos = 0
+                posse = 0
+                finalizacoes = 0
+
+                for team in stats:
+                    for item in team["statistics"]:
+                        if item["type"] == "Corner Kicks":
+                            total_corners += int(item["value"] or 0)
+                        if item["type"] == "Dangerous Attacks":
+                            ataques_perigosos += int(item["value"] or 0)
+                        if item["type"] == "Ball Possession":
+                            posse = max(posse, int(item["value"].replace("%","") or 0))
+                        if item["type"] == "Total Shots":
+                            finalizacoes += int(item["value"] or 0)
+
+                if total_corners >= 5 and ataques_perigosos >= 25 and posse >= 55 and finalizacoes >= 8:
+
+                    mensagem = f"""
+🚨 ECKBALL TIPPS – ALERTA AO VIVO
+
+⏱️ {minuto}'
+📊 Escanteios: {total_corners}
+🔥 Ataques perigosos: {ataques_perigosos}
+📈 Posse dominante: {posse}%
+
+🎯 Entrada sugerida: Over asiático
+"""
+
+                    enviar_telegram(mensagem)
+
+            except:
+                continue
+
+while True:
+    verificar_jogos()
+    time.sleep(120)
